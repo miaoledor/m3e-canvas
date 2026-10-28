@@ -206,6 +206,7 @@ function Tappable({
   railAnimating,
   panY,
   easeWidth,
+  pointerEvents,
 }: {
   item: Item;
   p: Palette;
@@ -227,6 +228,8 @@ function Tappable({
   panY?: boolean;
   /** this preview part is allowed to animate between measured and fixed widths */
   easeWidth?: boolean;
+  /** keep visible parts interactive when their group's empty space lets input through */
+  pointerEvents?: "auto";
 }) {
   const lang = useLang();
   const [pressed, setPressed] = useState(false);
@@ -583,7 +586,7 @@ function Tappable({
         endRipple(e.pointerId);
       }}
       onClick={onPick ? () => onMenu?.(!menu) : onTap}
-      style={{ cursor: live || onValue ? "pointer" : "default", display: "flex", position: "relative", touchAction: scrollRow ? (panY ? "pan-x pan-y" : "pan-x") : panY ? "pan-y" : "none" }}
+      style={{ cursor: live || onValue ? "pointer" : "default", display: "flex", position: "relative", pointerEvents, touchAction: scrollRow ? (panY ? "pan-x pan-y" : "pan-x") : panY ? "pan-y" : "none" }}
     >
       <M3Node item={item} palette={p} widths={widths} radii={radii} interactive={false} pressed={pressed && !onValue && !boxless} tabScroll={scrollRow ? tabScroll : undefined} easeWidth={easeWidth} />
       {live && !boxless && !segmented && TAP_LIT.includes(item.kind) && (
@@ -963,6 +966,9 @@ function Screen({
            stays where the author put it and the sheet grows into the room above */
         const rising = g.items.length === 1 && splitOpens(g.items[0]) && flipped.has(g.items[0].id) && splitMenuRisesAt(g.items[0], g.y, frame);
         const riseH = rising ? sizeOf({ ...g.items[0], [fabOpen]: undefined }, widths).h : 0;
+        // A hidden bar leaves its layout slot behind. Let input reach the body through
+        // that slot and the group's empty space; visible siblings opt back in below.
+        const passThrough = scrolls && navHidden && g.items.some((it) => it.kind === "bottomNav" && it.hideOnScroll);
         return (
         <div
           key={g.id}
@@ -973,7 +979,7 @@ function Screen({
           inert={hasModal && !g.items.some((it) => modalIds.has(it.id))}
           style={
             g.free
-              ? { position: "absolute", left: g.x - frame.x, top: g.y - frame.y - lift(g), zIndex: g.items.some((it) => modalIds.has(it.id)) ? 4 : g.items.some((it) => it.id === menuId) ? 2 : undefined }
+              ? { position: "absolute", left: g.x - frame.x, top: g.y - frame.y - lift(g), pointerEvents: passThrough ? "none" : undefined, zIndex: g.items.some((it) => modalIds.has(it.id)) ? 4 : g.items.some((it) => it.id === menuId) ? 2 : undefined }
               : {
                   position: "absolute",
                   left: g.x - frame.x + (fabCorner?.w ?? 0),
@@ -984,6 +990,7 @@ function Screen({
                   flexDirection: g.axis === "x" ? "row" : "column",
                   alignItems: g.axis === "x" ? "center" : "stretch",
                   gap: GAP,
+                  pointerEvents: passThrough ? "none" : undefined,
                 }
           }
         >
@@ -1040,6 +1047,7 @@ function Screen({
                   }
                 : undefined;
             const slotActions = it.actions;
+            const scrollingNav = scrolls && it.kind === "bottomNav" && !!it.hideOnScroll;
             const node = (
               <Tappable
                 key={it.id}
@@ -1085,6 +1093,7 @@ function Screen({
                 onRailToggle={it.kind === "navRail" && isWideRail(it) ? (animate) => changeRail(it.id, !it.railExpanded, animate) : undefined}
                 panY={scrolls && !pins.has(g.id)}
                 easeWidth={eases}
+                pointerEvents={passThrough && !scrollingNav ? "auto" : undefined}
               />
             );
             /* Keep the authored width as a right-aligned slot. The visual can then narrow from
@@ -1101,7 +1110,6 @@ function Screen({
               : node;
             // Leave the destinations in the accessibility tree, including while offscreen.
             // Focusing one reveals it immediately, before the next paint.
-            const scrollingNav = scrolls && it.kind === "bottomNav" && !!it.hideOnScroll;
             const content = scrollingNav ? (
               <div
                 key={it.id}
