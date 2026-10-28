@@ -805,9 +805,11 @@ function Screen({
     pointerScroll.current = false;
     setNavHidden(false);
   };
-  const onBodyScroll = (e: { currentTarget: { scrollTop: number } }) => {
+  const onBodyScroll = (e: { currentTarget: { scrollTop: number; scrollHeight: number; clientHeight: number } }) => {
+    const body = e.currentTarget;
+    // Body parts can extend past the authored screen length, so measure the real range.
     // Ignore elastic overscroll so bouncing at an edge cannot reverse the direction.
-    const top = clamp(e.currentTarget.scrollTop, 0, length - viewH);
+    const top = clamp(body.scrollTop, 0, body.scrollHeight - body.clientHeight);
     const down = top - bodyScrollTop.current;
     bodyScrollTop.current = top;
     if (hasFoldingFab && down !== 0) setFabFolded(down > 0);

@@ -269,11 +269,11 @@ describe("a label-bearing FAB that folds while the screen scrolls", () => {
         .filter((e) => typeof e.type === "function" && "item" in e.props)
         .map((e) => [(e.props.item as Item).id, (e.props.item as Item).kind]),
     );
-  const scrollBody = (node: unknown, scrollTop: number) => {
+  const scrollBody = (node: unknown, scrollTop: number, scrollHeight = PHONE_H * 2) => {
     const body = elements(node).find((e) => e.props["data-scroll-body"]);
     const onScroll = body?.props.onScroll;
     expect(onScroll).toBeTypeOf("function");
-    (onScroll as (e: { currentTarget: { scrollTop: number } }) => void)({ currentTarget: { scrollTop } });
+    (onScroll as (e: { currentTarget: { scrollTop: number; scrollHeight: number; clientHeight: number } }) => void)({ currentTarget: { scrollTop, scrollHeight, clientHeight: PHONE_H } });
   };
 
   beforeEach(() => {
@@ -324,6 +324,18 @@ describe("a label-bearing FAB that folds while the screen scrolls", () => {
     });
   });
 
+  it("unfolds on the first upward scroll through content beyond the authored screen length", () => {
+    const element = screenElement();
+    let tree = treeOf(element, true);
+    const scrollHeight = long.length + 116;
+    scrollBody(tree, PHONE_H + 116, scrollHeight);
+    tree = treeOf(element, false);
+    expect(kinds(tree)).toMatchObject({ "bar-fab": "fab", fab: "fab" });
+    scrollBody(tree, PHONE_H + 80, scrollHeight);
+    tree = treeOf(element, false);
+    expect(kinds(tree)).toMatchObject({ "bar-fab": "extendedFab", fab: "extendedFab" });
+  });
+
   it("never folds on a screen the device holds", () => {
     const element = screenElement();
     const tree = renderScreen({ ...element, props: { ...element.props, frame: { id: "long", name: "Long", x: 0, y: 0 }, groups } });
@@ -347,9 +359,9 @@ describe("navigation bars that hide on scroll", () => {
   const pose = (tree: Element) => (bar(tree).props.children as Element).props;
   const call = (node: Element, event: string, value: unknown = {}) => (node.props[event] as (value: unknown) => void)(value);
   const body = (tree: Element) => elements(tree).find((e) => e.props["data-scroll-body"])!;
-  const scroll = (tree: Element, top: number, pointer = true) => {
+  const scroll = (tree: Element, top: number, pointer = true, scrollHeight = long.length) => {
     if (pointer) call(body(tree), "onWheelCapture", { deltaY: 10 });
-    call(body(tree), "onScroll", { currentTarget: { scrollTop: top } });
+    call(body(tree), "onScroll", { currentTarget: { scrollTop: top, scrollHeight, clientHeight: PHONE_H } });
     return render();
   };
 
@@ -381,6 +393,14 @@ describe("navigation bars that hide on scroll", () => {
     const tree = render(true);
     call(body(tree), "onTouchMoveCapture");
     expect(pose(scroll(tree, 100, false)).animate).toEqual({ y: "100%" });
+  });
+
+  it("reveals the bar on the first upward scroll through content beyond the authored screen length", () => {
+    const scrollHeight = long.length + 116;
+    let tree = scroll(render(true), PHONE_H + 116, true, scrollHeight);
+    expect(pose(tree).animate).toEqual({ y: "100%" });
+    tree = scroll(tree, PHONE_H + 80, true, scrollHeight);
+    expect(pose(tree).animate).toEqual({ y: "0%" });
   });
 
   it("keeps bars visible for scrolling without direct wheel or touch input", () => {
@@ -420,14 +440,15 @@ describe("navigation bars that hide on scroll", () => {
     expect(pose(tree).transition).toMatchObject({ duration: 0 });
   });
 
-  it("ignores elastic overscroll at either end", () => {
-    let tree = scroll(render(true), PHONE_H);
-    tree = scroll(tree, PHONE_H + 30);
-    tree = scroll(tree, PHONE_H + 10);
+  it.each([PHONE_H * 2, PHONE_H * 2 + 116])("ignores elastic overscroll at either end with content height %s", (scrollHeight) => {
+    const max = scrollHeight - PHONE_H;
+    let tree = scroll(render(true), max, true, scrollHeight);
+    tree = scroll(tree, max + 30, true, scrollHeight);
+    tree = scroll(tree, max + 10, true, scrollHeight);
     expect(pose(tree).animate).toEqual({ y: "100%" });
-    tree = scroll(tree, 0);
-    tree = scroll(tree, -30);
-    tree = scroll(tree, -10);
+    tree = scroll(tree, 0, true, scrollHeight);
+    tree = scroll(tree, -30, true, scrollHeight);
+    tree = scroll(tree, -10, true, scrollHeight);
     expect(pose(tree).animate).toEqual({ y: "0%" });
   });
 
