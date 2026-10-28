@@ -268,12 +268,6 @@ describe("navigation bar scroll hiding in prompts", () => {
       "동작 줄이기 설정이 켜져 있거나 키 입력, 휠이나 터치 입력 없이 발생한 스크롤, 목적지 포커스로 복원할 때는 애니메이션을 사용하지 않는다",
     ],
   };
-  const accessibility: Record<Lang, string> = {
-    ja: "スクリーンリーダーの使用中は隠さず常に表示する",
-    en: "Keep it visible while a screen reader is active",
-    zh: "屏幕阅读器启用时始终显示，不随滚动隐藏",
-    ko: "스크린 리더가 활성화되어 있으면 숨기지 않고 항상 표시한다",
-  };
   const prompt = (lang: Lang, hideOnScroll?: boolean, length = PHONE_H * 2, kind: Item["kind"] = "bottomNav", platform: Doc["platform"] = "android") => {
     const nav = { ...makeItem(kind), id: "nav", hideOnScroll };
     return buildPrompt(baseDoc({ platform, frames: [{ ...phoneFrame, length }], groups: [{ id: "g", x: 0, y: length - 104, axis: "x", items: [nav] }] }), widths, undefined, lang);
@@ -284,7 +278,6 @@ describe("navigation bar scroll hiding in prompts", () => {
       const text = prompt(lang, true, PHONE_H * 2, "bottomNav", platform);
       expect(text).toContain(behavior[lang]);
       for (const requirement of requirements[lang]) expect(text).toContain(requirement);
-      expect(text).toContain(accessibility[lang]);
     }
   });
 

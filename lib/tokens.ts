@@ -1677,8 +1677,8 @@ export type Item = {
   /** extended FAB only: in the preview, fold to an icon-only standard FAB when the body scrolls down
      and unfold when it scrolls back up */
   collapseOnScroll?: boolean;
-  /** navigation bar only: hide below the screen on scroll down and return on scroll up;
-     keep visible when a screen reader is active */
+  /** navigation bar only: hide on downward pointer scrolling and return on upward
+     scrolling, at the top, or for keyboard use and destination focus */
   hideOnScroll?: boolean;
   /** palette token used as background (boxes, list items) */
   fill?: ColorToken;

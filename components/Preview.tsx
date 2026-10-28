@@ -813,8 +813,8 @@ function Screen({
     const down = top - bodyScrollTop.current;
     bodyScrollTop.current = top;
     if (hasFoldingFab && down !== 0) setFabFolded(down > 0);
-    // Assistive technology can scroll without pointer input. Only direct wheel/touch
-    // scrolling hides a bar. Preserve indicated focus without pinning it open after a pointer click.
+    // Only direct wheel/touch scrolling hides a bar. Preserve indicated focus
+    // without pinning it open after a pointer click.
     const focusedNav = screenRef.current?.querySelector("[data-scroll-nav] :focus-visible");
     if (!pointerScroll.current || focusedNav || top === 0) setNavHidden(false);
     else if (down !== 0) setNavHidden(down > 0);
