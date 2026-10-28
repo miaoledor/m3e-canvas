@@ -223,6 +223,40 @@ describe("extended FAB scroll-collapse prompt", () => {
   });
 });
 
+describe("navigation bar scroll hiding in prompts", () => {
+  const behavior: Record<Lang, string> = {
+    ja: "本文を下へスクロールすると画面の下へ隠れ",
+    en: "scrolling the body down slides it below the screen",
+    zh: "正文向下滚动时滑出屏幕底部隐藏",
+    ko: "본문을 아래로 스크롤하면 화면 아래로 숨고",
+  };
+  const accessibility: Record<Lang, string> = {
+    ja: "スクリーンリーダーの使用中は隠さず常に表示する",
+    en: "Keep it visible while a screen reader is active",
+    zh: "屏幕阅读器启用时始终显示，不随滚动隐藏",
+    ko: "스크린 리더가 활성화되어 있으면 숨기지 않고 항상 표시한다",
+  };
+  const prompt = (lang: Lang, hideOnScroll?: boolean, length = PHONE_H * 2, kind: Item["kind"] = "bottomNav", platform: Doc["platform"] = "android") => {
+    const nav = { ...makeItem(kind), id: "nav", hideOnScroll };
+    return buildPrompt(baseDoc({ platform, frames: [{ ...phoneFrame, length }], groups: [{ id: "g", x: 0, y: length - 104, axis: "x", items: [nav] }] }), widths, undefined, lang);
+  };
+
+  it.each(["ja", "en", "zh", "ko"] as Lang[])("describes scroll hiding and the screen reader exception in %s on Android and web", (lang) => {
+    for (const platform of ["android", "web"] as const) {
+      const text = prompt(lang, true, PHONE_H * 2, "bottomNav", platform);
+      expect(text).toContain(behavior[lang]);
+      expect(text).toContain(accessibility[lang]);
+    }
+  });
+
+  it.each(["ja", "en", "zh", "ko"] as Lang[])("only describes hiding for enabled navigation bars on scrollable screens in %s", (lang) => {
+    expect(prompt(lang)).not.toContain(behavior[lang]);
+    expect(prompt(lang, false)).not.toContain(behavior[lang]);
+    expect(prompt(lang, true, PHONE_H)).not.toContain(behavior[lang]);
+    expect(prompt(lang, true, PHONE_H * 2, "navRail")).not.toContain(behavior[lang]);
+  });
+});
+
 describe("buildPrompt — platform switch", () => {
   it("Android platform mentions Android / Material", () => {
     const doc = baseDoc({ platform: "android" });
