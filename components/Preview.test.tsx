@@ -364,6 +364,14 @@ describe("navigation bars that hide on scroll", () => {
     call(body(tree), "onScroll", { currentTarget: { scrollTop: top, scrollHeight, clientHeight: PHONE_H } });
     return render();
   };
+  const focusDestination = (tree: Element, focus: { visible: boolean }) => {
+    const destination = {};
+    (tree.props.ref as { current: unknown }).current = {
+      querySelector: (selector: string) => selector === "[data-scroll-nav]:focus-within" || (focus.visible && selector === "[data-scroll-nav] :focus-visible") ? destination : null,
+    };
+    call(bar(tree), "onFocusCapture");
+    return render();
+  };
 
   beforeEach(() => {
     hooks.refs = [];
@@ -425,12 +433,31 @@ describe("navigation bars that hide on scroll", () => {
     expect(bar(tree).props["aria-hidden"]).toBeUndefined();
     expect(bar(tree).props.inert).toBeUndefined();
     expect(elements(bar(tree)).some((e) => (e.props.item as Item)?.id === "nav")).toBe(true);
-    call(bar(tree), "onFocusCapture");
+    tree = focusDestination(tree, { visible: true });
+    expect(pose(tree).animate).toEqual({ y: "0%" });
+    expect(pose(tree).transition).toMatchObject({ duration: 0 });
+    expect(pose(scroll(tree, 240)).animate).toEqual({ y: "0%" });
+  });
+
+  it("allows hiding after a pointer click leaves a destination focused", () => {
+    let tree = focusDestination(render(true), { visible: false });
+    expect(pose(tree).animate).toEqual({ y: "0%" });
+    tree = scroll(tree, 120);
+    expect(pose(tree).animate).toEqual({ y: "100%" });
+    expect(pose(scroll(tree, 119)).animate).toEqual({ y: "0%" });
+  });
+
+  it("protects the same focused destination when the user switches to the keyboard", () => {
+    const focus = { visible: false };
+    let tree = scroll(focusDestination(render(true), focus), 120);
+    expect(pose(tree).animate).toEqual({ y: "100%" });
+    call(tree, "onKeyDownCapture", { key: "ArrowRight" });
+    focus.visible = true;
     tree = render();
     expect(pose(tree).animate).toEqual({ y: "0%" });
     expect(pose(tree).transition).toMatchObject({ duration: 0 });
-    (tree.props.ref as { current: unknown }).current = { querySelector: () => ({}) };
-    expect(pose(scroll(tree, 240)).animate).toEqual({ y: "0%" });
+    tree = scroll(tree, 240);
+    expect(pose(tree).animate).toEqual({ y: "0%" });
   });
 
   it("respects reduced motion", () => {
