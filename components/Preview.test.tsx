@@ -8,6 +8,7 @@ const hooks = vi.hoisted(() => ({
   cursor: 0,
   effects: [] as (() => void | (() => void))[],
   present: true,
+  reducedMotion: false,
   peek: false,
   states: [] as unknown[],
   stateCursor: 0,
@@ -32,7 +33,7 @@ vi.mock("react", async (original) => ({
 vi.mock("motion/react", () => ({
   AnimatePresence: "presence",
   motion: { div: "div", button: "button" },
-  useReducedMotion: () => false,
+  useReducedMotion: () => hooks.reducedMotion,
   useIsPresent: () => hooks.present,
   useMotionValue: (value: number) => ({ get: () => value }),
   useTransform: () => 0,
@@ -329,4 +330,117 @@ describe("a label-bearing FAB that folds while the screen scrolls", () => {
     expect(elements(tree).some((e) => e.props["data-scroll-body"])).toBe(false);
     expect(kinds(tree).fab).toBe("extendedFab");
   });
+});
+
+describe("navigation bars that hide on scroll", () => {
+  const nav = { ...makeItem("bottomNav"), id: "nav", hideOnScroll: true };
+  const long = { id: "long", name: "Long", x: 0, y: 0, length: PHONE_H * 2 };
+  const groups: Group[] = [
+    { id: "nav-group", x: 0, y: long.length - sizeOf(nav, {}).h, axis: "y", items: [nav, { ...makeItem("fab"), id: "fab" }] },
+    { id: "keep", x: 0, y: 300, axis: "x", items: [{ ...nav, id: "keep", hideOnScroll: false }] },
+    { id: "rail", x: 0, y: 0, axis: "x", items: [{ ...makeItem("navRail"), id: "rail", hideOnScroll: true }] },
+    { id: "fold", x: 200, y: 400, axis: "x", items: [{ ...makeItem("extendedFab"), id: "fold", collapseOnScroll: true }] },
+  ];
+  let element: Element;
+  const render = (fresh = false, props: Record<string, unknown> = {}) => renderScreen({ ...element, props: { ...element.props, frame: long, groups, ...props } }, fresh);
+  const bar = (tree: Element) => elements(tree).find((e) => e.props["data-scroll-nav"] === "nav")!;
+  const pose = (tree: Element) => (bar(tree).props.children as Element).props;
+  const call = (node: Element, event: string, value: unknown = {}) => (node.props[event] as (value: unknown) => void)(value);
+  const body = (tree: Element) => elements(tree).find((e) => e.props["data-scroll-body"])!;
+  const scroll = (tree: Element, top: number, pointer = true) => {
+    if (pointer) call(body(tree), "onWheelCapture", { deltaY: 10 });
+    call(body(tree), "onScroll", { currentTarget: { scrollTop: top } });
+    return render();
+  };
+
+  beforeEach(() => {
+    hooks.refs = [];
+    hooks.present = true;
+    hooks.reducedMotion = false;
+    element = screenElement();
+  });
+  afterEach(() => {
+    hooks.reducedMotion = false;
+  });
+
+  it("hides on scroll down, stays hidden at rest and returns on any scroll up", () => {
+    let tree = render(true);
+    expect(pose(tree).animate).toEqual({ y: "0%" });
+    tree = scroll(tree, 120);
+    expect(pose(tree).animate).toEqual({ y: "100%" });
+    expect(bar(tree).props.style).toMatchObject({ pointerEvents: "none" });
+    call(body(tree), "onScrollEnd");
+    tree = render();
+    expect(pose(tree).animate).toEqual({ y: "100%" });
+    tree = scroll(tree, 119);
+    expect(pose(tree).animate).toEqual({ y: "0%" });
+    expect(bar(tree).props.style).toMatchObject({ pointerEvents: undefined });
+  });
+
+  it("also hides during touch scrolling", () => {
+    const tree = render(true);
+    call(body(tree), "onTouchMoveCapture");
+    expect(pose(scroll(tree, 100, false)).animate).toEqual({ y: "100%" });
+  });
+
+  it("keeps bars visible for scrolling without direct wheel or touch input", () => {
+    let tree = render(true);
+    tree = scroll(tree, 100, false);
+    expect(pose(tree).animate).toEqual({ y: "0%" });
+    call(body(tree), "onWheelCapture", { deltaY: 0 });
+    expect(pose(scroll(tree, 200, false)).animate).toEqual({ y: "0%" });
+  });
+
+  it("restores navigation for keyboard use and waits for fresh pointer scrolling to hide again", () => {
+    let tree = scroll(render(true), 120);
+    call(tree, "onKeyDownCapture", { key: "Tab" });
+    tree = scroll(render(), 240, false);
+    expect(pose(tree).animate).toEqual({ y: "0%" });
+    expect(pose(tree).transition).toMatchObject({ duration: 0 });
+    expect(pose(scroll(tree, 250)).animate).toEqual({ y: "100%" });
+  });
+
+  it("reveals a focused destination immediately and never removes it from the accessibility tree", () => {
+    let tree = scroll(render(true), 120);
+    expect(bar(tree).props["aria-hidden"]).toBeUndefined();
+    expect(bar(tree).props.inert).toBeUndefined();
+    expect(elements(bar(tree)).some((e) => (e.props.item as Item)?.id === "nav")).toBe(true);
+    call(bar(tree), "onFocusCapture");
+    tree = render();
+    expect(pose(tree).animate).toEqual({ y: "0%" });
+    expect(pose(tree).transition).toMatchObject({ duration: 0 });
+    (tree.props.ref as { current: unknown }).current = { querySelector: () => ({}) };
+    expect(pose(scroll(tree, 240)).animate).toEqual({ y: "0%" });
+  });
+
+  it("respects reduced motion", () => {
+    hooks.reducedMotion = true;
+    const tree = scroll(render(true), 120);
+    expect(pose(tree).animate).toEqual({ y: "100%" });
+    expect(pose(tree).transition).toMatchObject({ duration: 0 });
+  });
+
+  it("ignores elastic overscroll at either end", () => {
+    let tree = scroll(render(true), PHONE_H);
+    tree = scroll(tree, PHONE_H + 30);
+    tree = scroll(tree, PHONE_H + 10);
+    expect(pose(tree).animate).toEqual({ y: "100%" });
+    tree = scroll(tree, 0);
+    tree = scroll(tree, -30);
+    tree = scroll(tree, -10);
+    expect(pose(tree).animate).toEqual({ y: "0%" });
+  });
+
+  it("only animates opted-in bars, leaving rails and grouped siblings alone while FABs still fold", () => {
+    const tree = scroll(render(true), 120);
+    expect(elements(tree).filter((e) => e.props["data-scroll-nav"]).map((e) => e.props["data-scroll-nav"])).toEqual(["nav"]);
+    expect(elements(bar(tree)).some((e) => (e.props.item as Item)?.id === "fab")).toBe(false);
+    expect(elements(tree).find((e) => (e.props.item as Item)?.id === "fold")?.props.item).toMatchObject({ kind: "fab" });
+  });
+
+  it("does not hide bars on a screen that does not scroll", () => {
+    const tree = render(true, { frame: { ...long, length: PHONE_H } });
+    expect(elements(tree).some((e) => e.props["data-scroll-nav"] || e.props["data-scroll-body"])).toBe(false);
+  });
+
 });
